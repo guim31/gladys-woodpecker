@@ -295,12 +295,22 @@ export class WoodpeckerClient {
     return data.map(normalizeRepo).filter(Boolean);
   }
 
-  /** The newest pipelines of a repository, newest first. */
-  async pipelines(repoId) {
-    const data = await this.getJson(
-      `/api/repos/${repoId}/pipelines?page=1&perPage=${PIPELINES_PER_PAGE}`,
-      { item: true },
-    );
+  /**
+   * The newest pipelines of a repository, newest first, of a branch and some
+   * events only when asked (the server filters: the newest pipelines of the
+   * default branch are not pushed out by a flow of pull requests).
+   * @param {number} repoId
+   * @param {{ branch?: string, events?: string[] }} [filter]
+   */
+  async pipelines(repoId, { branch, events } = {}) {
+    const query = new URLSearchParams({ page: '1', perPage: String(PIPELINES_PER_PAGE) });
+    if (branch) {
+      query.set('branch', branch);
+    }
+    if (events?.length) {
+      query.set('event', events.join(','));
+    }
+    const data = await this.getJson(`/api/repos/${repoId}/pipelines?${query}`, { item: true });
     if (!Array.isArray(data)) {
       throw new WoodpeckerError(ERROR_KINDS.NOT_WOODPECKER, 'The answer is not the Woodpecker API');
     }

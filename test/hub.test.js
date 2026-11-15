@@ -410,3 +410,77 @@ test('local or cloud badge', () => {
   assert.equal(transportOf('https://ci.woodpecker-ci.org'), 'cloud');
   assert.equal(transportOf('http://[fd00::2]:8000'), 'local');
 });
+
+test('changing the pipelines that count announces no past pipeline', async (t) => {
+  const world = await createWorld();
+  t.after(() => world.app.stop());
+  await world.fake.configUpdated({ ...CONFIG, scope: 'all' });
+  assert.deepEqual(world.fake.sceneEvents, [], 'the failed pull request of alice/scripts is past');
+  // Back to the default branch: alice/scripts was never red there.
+  await world.fake.configUpdated({ ...CONFIG, scope: 'default_branch' });
+  world.woodpecker.finish(SCRIPTS, 'success');
+  await world.hub.pollNow();
+  assert.deepEqual(events(world, TRIGGERS.STATUS), []);
+  assert.equal(events(world, TRIGGERS.FINISHED).length, 1);
+});
+
+test('a flow of pull requests does not hide the default branch', async (t) => {
+  const world = await createWorld();
+  t.after(() => world.app.stop());
+  await createDevices(world);
+  for (let i = 0; i < 12; i += 1) {
+    world.woodpecker.finish(API, 'success', { branch: 'feature', event: 'pull_request' });
+  }
+  await world.hub.pollNow();
+  assert.equal(state(world, API, 'status'), 'Failed');
+  assert.equal(state(world, API, 'pipeline_number'), 1);
+  assert.equal(server(world, 'failing_repos'), 1);
+  assert.ok(
+    world.woodpecker.requests.some((request) =>
+      request.url.endsWith(
+        '/api/repos/3/pipelines?page=1&perPage=10&branch=main&event=push%2Cmanual%2Ccron%2Cdeployment%2Ctag%2Crelease',
+      ),
+    ),
+  );
+});
+
+test('pipelines unreadable at start: the repository waits, never "No pipeline"', async (t) => {
+  const woodpecker = sampleWoodpecker();
+  const handle = woodpecker.request;
+  let broken = true;
+  woodpecker.request = async (url, options) =>
+    broken && url.includes('/api/repos/3/pipelines')
+      ? { status: 502, body: 'Bad Gateway' }
+      : handle(url, options);
+  const world = await createWorld({ woodpecker });
+  t.after(() => world.app.stop());
+  await createDevices(world);
+  assert.equal(world.hub.repos.has(API), false, 'not shown as a repository without pipeline');
+  assert.equal(world.fake.discoveredDevices.length, 3);
+  broken = false;
+  // The list of team/api is read again at the next cycle, without any event for the past.
+  await world.hub.pollNow();
+  await createDevices(world, (device) => device.external_id === idsOf(world, API).device);
+  assert.equal(state(world, API, 'status'), 'Failed');
+  assert.deepEqual(world.fake.sceneEvents, []);
+});
+
+test('restart takes the newest finished pipeline; Woodpecker 2 is reported', async (t) => {
+  const world = await createWorld({ config: { ...CONFIG, allow_restart: true } });
+  t.after(() => world.app.stop());
+  world.woodpecker.start(WEBSITE);
+  await world.hub.pollNow();
+  await world.fake.sceneAction('restart_pipeline', { repo: idsOf(world, WEBSITE).device });
+  const post = world.woodpecker.requests.find((request) => request.method === 'POST');
+  assert.match(post.url, /\/api\/repos\/1\/pipelines\/1$/);
+  world.hub.version = '2.8.3';
+  world.hub.readAt = world.hub.now();
+  const handle = world.woodpecker.request;
+  world.hub.client.request = async (url, options) =>
+    url.endsWith('/api/version')
+      ? { status: 200, body: '{"version":"2.8.3"}' }
+      : handle(url, options);
+  world.hub.version = null;
+  const ack = await world.fake.action('test_connection', {});
+  assert.match(ack.data.message.en, /Woodpecker 2\.8\.3: version 3 or later is needed/);
+});

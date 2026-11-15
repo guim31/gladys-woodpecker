@@ -33,6 +33,7 @@ import {
   serverValues,
 } from './devices.js';
 import {
+  ACTIVE,
   ERROR_KINDS,
   WoodpeckerClient,
   WoodpeckerError,
@@ -103,6 +104,15 @@ export function transportOf(url) {
     ? DEVICE_TRANSPORTS.LOCAL
     : DEVICE_TRANSPORTS.CLOUD;
 }
+
+// The events that count on the default branch (no pull request).
+export const DEFAULT_BRANCH_EVENTS = ['push', 'manual', 'cron', 'deployment', 'tag', 'release'];
+
+/** The filter of the pipeline list for a repository (src/woodpecker/client.js). */
+export const filterOf = (repo, scope) =>
+  scope === SCOPES.ALL || !repo.defaultBranch
+    ? {}
+    : { branch: repo.defaultBranch, events: DEFAULT_BRANCH_EVENTS };
 
 /** The pipelines that count for a repository, newest first. */
 export function inScope(repo, pipelines, scope) {
@@ -188,6 +198,7 @@ export class WoodpeckerHub {
       value && typeof value === 'object' && !Array.isArray(value) ? value : {};
     this.saved = {
       url: typeof saved.url === 'string' ? saved.url : null,
+      scope: typeof saved.scope === 'string' ? saved.scope : null,
       repos: object(saved.repos),
       pending: Array.isArray(saved.pending) ? saved.pending : [],
     };
@@ -229,6 +240,12 @@ export class WoodpeckerHub {
       if (config.url) {
         this.saved.url = config.url;
       }
+      // Other pipelines count: what was seen under the previous scope would
+      // announce the past, or a return to green of a repository never red.
+      if (this.saved.scope && this.saved.scope !== config.scope) {
+        this.saved.repos = {};
+      }
+      this.saved.scope = config.scope;
     }
     try {
       if (this.client) {
@@ -344,24 +361,31 @@ export class WoodpeckerHub {
         out.set(repo.id, { signature, pipelines: [] });
         return;
       }
+      // A pipeline awaiting approval may wait for days: not read again for it.
       if (
         cached &&
         cached.signature === signature &&
-        !cached.pipelines.some((pipeline) => isActive(pipeline.status))
+        !cached.pipelines.some(
+          (pipeline) => pipeline.status === ACTIVE.RUNNING || pipeline.status === ACTIVE.PENDING,
+        )
       ) {
         out.set(repo.id, cached);
         return;
       }
       try {
-        out.set(repo.id, { signature, pipelines: await client.pipelines(repo.id) });
+        out.set(repo.id, {
+          signature,
+          pipelines: await client.pipelines(repo.id, filterOf(repo, this.config.scope)),
+        });
       } catch (err) {
         if (!(err instanceof WoodpeckerError) || isGlobal(err)) {
           throw err;
         }
         // Deactivated between the two requests, or a hiccup: what was known
-        // stays, read again next time.
+        // stays, read again next time; nothing known (just started): the
+        // repository waits for the next reading (null).
         this.problems.fail(`pipelines:${repo.id}`, `${repo.fullName}: ${err.message}`);
-        out.set(repo.id, { signature: null, pipelines: cached?.pipelines ?? [] });
+        out.set(repo.id, cached ? { signature: null, pipelines: cached.pipelines } : null);
         return;
       }
       this.problems.recover(`pipelines:${repo.id}`, `${repo.fullName}: pipelines read again`);
@@ -376,6 +400,9 @@ export class WoodpeckerHub {
     }
     if (version !== this.version) {
       logger.info(`Connected to Woodpecker ${version || '(version unknown)'}`);
+      if (isTooOld(version)) {
+        logger.warn(`Woodpecker ${version}: version 3 or later is needed to read the pipelines`);
+      }
       this.version = version;
     }
     this.error = null;
@@ -393,16 +420,21 @@ export class WoodpeckerHub {
     }
     this.missing = missing;
 
-    this.cache = pipelines;
-    const next = new Map(
-      kept.map((repo) => [
-        repo.id,
-        {
+    this.cache = new Map([...pipelines].filter(([, entry]) => entry));
+    // A repository whose pipelines could not be read yet keeps what was
+    // published before, or waits: never "No pipeline" for an unread one.
+    const unread = new Set(kept.filter((repo) => !pipelines.get(repo.id)).map((repo) => repo.id));
+    const next = new Map();
+    for (const repo of kept) {
+      if (!unread.has(repo.id)) {
+        next.set(repo.id, {
           ...repo,
-          pipelines: inScope(repo, pipelines.get(repo.id)?.pipelines ?? [], this.config.scope),
-        },
-      ]),
-    );
+          pipelines: inScope(repo, pipelines.get(repo.id).pipelines, this.config.scope),
+        });
+      } else if (this.repos.has(repo.id)) {
+        next.set(repo.id, this.repos.get(repo.id));
+      }
+    }
     if (JSON.stringify(viewOf(this.repos, this.queue)) !== JSON.stringify(viewOf(next, queue))) {
       widgetChanged = true;
     }
@@ -412,6 +444,9 @@ export class WoodpeckerHub {
     let dirty = false;
     const events = [];
     for (const repo of next.values()) {
+      if (unread.has(repo.id)) {
+        continue;
+      }
       const { saved, found } = this.compareRepo(repo);
       events.push(...found);
       if (JSON.stringify(this.saved.repos[repo.id]) !== JSON.stringify(saved)) {
@@ -419,9 +454,11 @@ export class WoodpeckerHub {
         dirty = true;
       }
     }
-    // Repositories no longer followed are forgotten.
+    // Repositories no longer followed are forgotten (one beyond the cap of
+    // 50 keeps what was seen: the order of the list may change).
+    const followedIds = new Set(followed.map((repo) => repo.id));
     for (const id of Object.keys(this.saved.repos)) {
-      if (!next.has(Number(id))) {
+      if (!followedIds.has(Number(id))) {
         delete this.saved.repos[id];
         dirty = true;
       }
@@ -779,7 +816,9 @@ export class WoodpeckerHub {
     if (!this.config.allowRestart) {
       throw new Error(pick(ACTION_TEXT.restartDisabled, language));
     }
-    const last = repo.pipelines[0];
+    // The newest finished pipeline: a running one would run twice, a blocked
+    // one is refused by Woodpecker.
+    const last = repo.pipelines.find((pipeline) => !isActive(pipeline.status));
     if (!last) {
       throw new Error(pick(ACTION_TEXT.noPipeline, language));
     }
@@ -817,6 +856,9 @@ export class WoodpeckerHub {
           : text.queue(summary.pending, summary.running, summary.idleAgents),
         text.restart(this.config.allowRestart),
       ];
+      if (isTooOld(this.version)) {
+        lines.push(text.tooOld(this.version));
+      }
       if (this.missing.length > 0) {
         lines.push(text.missing(this.missing.join(', ')));
       }
@@ -833,8 +875,11 @@ function emptySaved() {
   // repos: Woodpecker id → { seen: [finished pipeline numbers], broken:
   // bool|null, decided }; pending: scene events Gladys refused (it restarts),
   // sent again at the next reading.
-  return { url: null, repos: {}, pending: [] };
+  return { url: null, scope: null, repos: {}, pending: [] };
 }
+
+/** Woodpecker 2 and older give no last pipeline per repository. */
+export const isTooOld = (version) => /^[0-2]\./.test(version ?? '');
 
 // The whole server is concerned, not one part of the reading.
 const isGlobal = (err) =>

@@ -158,10 +158,17 @@ export class FakeWoodpecker {
         return { status: 404, body: 'null' };
       }
       if (method === 'GET') {
+        // Filters as on Woodpecker 3.20: one branch, events separated by commas.
         const perPage = Number(searchParams.get('perPage') ?? 50);
+        const branch = searchParams.get('branch');
+        const events = searchParams.get('event')?.split(',');
         return json(
           200,
-          repo.pipelines.slice(0, perPage).map((pipeline) => this.pipelineJson(repo, pipeline)),
+          repo.pipelines
+            .filter((pipeline) => !branch || pipeline.branch === branch)
+            .filter((pipeline) => !events || events.includes(pipeline.event))
+            .slice(0, perPage)
+            .map((pipeline) => this.pipelineJson(repo, pipeline)),
         );
       }
     }

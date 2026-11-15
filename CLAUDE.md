@@ -274,7 +274,12 @@ long, et sur un « Sie »/« Ihr… » de politesse en allemand. Le store exige 
 - **Identité d'un dépôt** : son id Woodpecker (survit au renommage sur la forge ; un dépôt désactivé puis
   réactivé garde le sien).
 - **Portée** (`scope`) : par défaut, seuls les pipelines de la branche par défaut hors `pull_request*`
-  comptent (état, déclencheurs, relance) ; `all` prend tout.
+  comptent (état, déclencheurs, relance) ; `all` prend tout. Le filtre est fait **par le serveur**
+  (`?branch=<défaut>&event=push,manual,cron,deployment,tag,release`, vérifié sur 3.20.1 : événements
+  séparés par des virgules, un `event` répété ne garde que le premier), sinon dix pull requests
+  chassent la branche par défaut de la page. Changer de portée efface ce qui a été vu (`saved.scope`) :
+  pas d'annonce du passé. Un dépôt dont la liste n'a jamais pu être lue attend la lecture suivante
+  (jamais « Aucun pipeline »).
 - Les pipelines terminés vus sont gardés dans `/data` (numéros) ; seul un pipeline plus récent que le
   dernier décisif (succès, échec, erreur) change « en échec / au vert » (`decided`). Annulé, refusé,
   ignoré ne changent rien.

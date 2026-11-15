@@ -162,6 +162,8 @@ export const REPORT_TEXT = {
         : 'Restarting pipelines from scenes: off',
     missing: (names) => `Not found in Woodpecker: ${names}`,
     tooMany: (max) => `Only the first ${max} repositories are followed.`,
+    tooOld: (version) =>
+      `Woodpecker ${version}: version 3 or later is needed to read the pipelines.`,
   },
   fr: {
     ok: 'Connecté',
@@ -176,6 +178,8 @@ export const REPORT_TEXT = {
         : 'Relance des pipelines depuis les scènes : désactivée',
     missing: (names) => `Introuvables dans Woodpecker : ${names}`,
     tooMany: (max) => `Seuls les ${max} premiers dépôts sont suivis.`,
+    tooOld: (version) =>
+      `Woodpecker ${version} : la version 3 ou plus récente est nécessaire pour lire les pipelines.`,
   },
   de: {
     ok: 'Verbunden',
@@ -190,6 +194,8 @@ export const REPORT_TEXT = {
         : 'Pipelines aus Szenen neu starten: aus',
     missing: (names) => `In Woodpecker nicht gefunden: ${names}`,
     tooMany: (max) => `Nur die ersten ${max} Repositorys werden verfolgt.`,
+    tooOld: (version) =>
+      `Woodpecker ${version}: Version 3 oder neuer ist nötig, um die Pipelines zu lesen.`,
   },
   es: {
     ok: 'Conectado',
@@ -204,6 +210,8 @@ export const REPORT_TEXT = {
         : 'Relanzar pipelines desde las escenas: desactivado',
     missing: (names) => `No encontrados en Woodpecker: ${names}`,
     tooMany: (max) => `Solo se siguen los ${max} primeros repositorios.`,
+    tooOld: (version) =>
+      `Woodpecker ${version}: se necesita la versión 3 o posterior para leer los pipelines.`,
   },
 };
 
