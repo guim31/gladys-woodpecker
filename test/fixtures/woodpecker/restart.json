@@ -1,0 +1,53 @@
+{
+  "id": 3,
+  "number": 2,
+  "author": "alice",
+  "parent": 1,
+  "event": "manual",
+  "event_reason": null,
+  "status": "pending",
+  "errors": null,
+  "created": 1794759823,
+  "updated": 1794759823,
+  "started": 0,
+  "finished": 0,
+  "deploy_to": "",
+  "deploy_task": "",
+  "commit": "213225ed98a93652d99c0cabe89e86ac430e3fb4",
+  "branch": "main",
+  "rerun_count": 1,
+  "ref": "refs/heads/main",
+  "refspec": "",
+  "author_avatar": "https://git.example.org/avatars/da7ddd169d64dd2d37b60b2db02f1569",
+  "forge_url": "https://git.example.org/alice/red-repo/commit/213225ed98a93652d99c0cabe89e86ac430e3fb4",
+  "reviewed_by": "",
+  "reviewed": 0,
+  "workflows": [
+    {
+      "id": 2,
+      "pipeline_id": 3,
+      "pid": 1,
+      "name": "woodpecker",
+      "state": "pending",
+      "children": [
+        {
+          "id": 2,
+          "uuid": "01M7G0B40GCESBDKT4A4QMCFSY",
+          "pipeline_id": 3,
+          "pid": 2,
+          "ppid": 1,
+          "name": "check",
+          "state": "pending",
+          "exit_code": 0,
+          "type": "commands"
+        }
+      ]
+    }
+  ],
+  "version": "3.20.1",
+  "title": "",
+  "message": "MANUAL PIPELINE @ main",
+  "timestamp": 1794759801,
+  "sender": "",
+  "author_email": "alice@example.com"
+}

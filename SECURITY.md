@@ -30,6 +30,20 @@ Gladys before reporting a problem.
 
 In scope: the code of this repository and the Docker image it publishes.
 
+What the integration handles:
+
+- The Woodpecker personal access token, stored by Gladys in the integration
+  configuration (a `secret` field). It is sent only to the configured
+  Woodpecker address, in the `Authorization` header, never written to the logs
+  or to `/data`. Redirects are not followed, so the token never leaves for
+  another address. It carries the rights of its user: a dedicated user limits
+  what a leak would expose.
+- `/data/woodpecker-state.json`: the Woodpecker address, and, per followed
+  repository, the numbers of the pipelines already seen and whether it was
+  failing, plus the scene events Gladys refused. No token, no pipeline content.
+- Network: HTTP(S) requests to the Woodpecker server only; nothing is listened
+  to. Restarting a pipeline (a POST) is off unless the user turns it on.
+
 Out of scope: Gladys Assistant itself (see its
 [security policy](https://github.com/GladysAssistant/Gladys/security/policy)),
 and the third-party services and devices the integration talks to.

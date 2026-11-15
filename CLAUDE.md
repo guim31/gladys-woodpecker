@@ -31,16 +31,20 @@ pushing.
 ## Architecture
 
 ```
-index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
+index.js                          SDK wiring only (src/app.js registers the handlers)
+src/app.js                        every SDK handler, wired to the hub; the tests use it too
+src/hub.js                        reading loop, states, scene events, transports, restarts
+src/woodpecker/client.js          Woodpecker REST API client (the only network code)
+src/devices.js                    device payloads (one per repository + the server) and their values
 src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
+src/widgets.js                    dashboard widget handler (manifest `widgets`)
+src/texts.js                      every text sent to Gladys, in four languages
 src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
+src/store.js, src/problems.js     /data persistence; one log line per repeated failure
 gladys-assistant-integration.json manifest: name, config_schema, actions, image...
-docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
-test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
+docs/{en,fr,de,es}.md             user documentation, re-hosted by Gladys (mandatory)
+test/                             node --test, against the SDK's fake Gladys and test/helpers/fakeWoodpecker.js
+test/fixtures/woodpecker/         real answers of Woodpecker 3.20.1 (Forgejo forge), anonymized
 .github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
 ```
 
@@ -70,8 +74,8 @@ test/                             node --test, against the SDK's fake Gladys (in
   `type: "provider"`: 5.1.0). `test/manifest.test.js` ties the manifest to the
   code (defaults, action, scene and widget handlers): change both sides
   together.
-- **User-facing text** is bilingual (English and French): action messages,
-  manifest texts, and `docs/en.md` / `docs/fr.md`, kept in sync.
+- **User-facing text** is in English, French, German and Spanish: action
+  messages, manifest texts, and `docs/{en,fr,de,es}.md`, kept in sync.
 - **Style.** Prettier formats, ESLint catches mistakes. Comments explain why,
   in English. Tests never touch the network.
 
@@ -251,3 +255,33 @@ long, et sur un « Sie »/« Ihr… » de politesse en allemand. Le store exige 
 - Docs `en`, `fr`, `de`, `es` avec les mêmes sections.
 - Chauffe, ouverture, sécurité : ne rien rendre pilotable « comme un thermostat » ou par un assistant
   vocal quand une erreur serait dangereuse (leçon d'OctoPrint).
+
+## Woodpecker CI (cette intégration)
+
+- **API** : REST, `Authorization: Bearer <jeton personnel>`. Une lecture (chaque minute par défaut,
+  minuteur du conteneur, `should_poll: false`) : `/api/user/repos` (dépôts **actifs** visibles par
+  l'utilisateur, chacun avec `last_pipeline` depuis Woodpecker 3), `/api/queue/info` (**admin seulement**,
+  403 sinon : la file reste inconnue), `/api/version` (une fois, et après une panne). Les pipelines d'un
+  dépôt (`/api/repos/<id>/pipelines?page=1&perPage=10`) ne sont relus que si son `last_pipeline`
+  (numéro + statut) a changé, ou tant qu'un de ses pipelines tourne.
+- **Relevé sur 3.20.1** (Forgejo 11, agent en backend `local`) : `/api/version` répond sans jeton ; sans
+  jeton ou mauvais jeton, **401** `User not authorized` (texte, pas JSON) ; dépôt ou pipeline inconnu,
+  404 corps `null`. Heures en **secondes** (`created`, `started`, `finished`, à 0 tant que pas fini).
+  `stats.worker_count` de la file compte les agents **libres** (0 pendant qu'un pipeline tourne sur le
+  seul agent) : d'où « Agents libres », pas « connectés ». Une erreur de YAML donne un pipeline au statut
+  `error` (avec `errors`) : compté comme un échec. Relancer (`POST /api/repos/<id>/pipelines/<n>`) crée un
+  nouveau pipeline `pending`, même événement et même branche que l'original, `parent` = n.
+- **Identité d'un dépôt** : son id Woodpecker (survit au renommage sur la forge ; un dépôt désactivé puis
+  réactivé garde le sien).
+- **Portée** (`scope`) : par défaut, seuls les pipelines de la branche par défaut hors `pull_request*`
+  comptent (état, déclencheurs, relance) ; `all` prend tout.
+- Les pipelines terminés vus sont gardés dans `/data` (numéros) ; seul un pipeline plus récent que le
+  dernier décisif (succès, échec, erreur) change « en échec / au vert » (`decided`). Annulé, refusé,
+  ignoré ne changent rien.
+- **Banc réel** (scripts hors dépôt) : Forgejo + serveur + agent dans `gladys-test-woodpecker`, appli
+  OAuth créée par l'API Forgejo, connexion OAuth rejouée par `fetch` (formulaire Forgejo, page
+  d'autorisation), puis `POST /api/user/token` avec l'en-tête `X-CSRF-Token` lu dans `/web-config.js`.
+  L'agent officiel est une image `scratch` : le backend `local` demande un shell, d'où une image alpine
+  qui copie le binaire ; dans ce backend, `image:` désigne le shell (`image: sh`).
+- **Widget** : la variante de texte `muted` n'existe pas (`heading`, `body`, `caption`) :
+  `validateWidgetContent` la refuse ; le test du widget l'appelle sur chaque contenu.
