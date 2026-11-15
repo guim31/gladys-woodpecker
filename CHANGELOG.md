@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-15
+
 ### Added
 
 - First version: the pipelines of Woodpecker CI 3 or later in Gladys (Gladys
@@ -27,4 +29,5 @@ the notes of the version's GitHub Release.
 - A "Woodpecker pipelines" dashboard widget, failing repositories first.
 - English, French, German and Spanish texts and documentation.
 
-[Unreleased]: https://github.com/guim31/gladys-woodpecker/commits/main
+[Unreleased]: https://github.com/guim31/gladys-woodpecker/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/guim31/gladys-woodpecker/releases/tag/v1.0.0
