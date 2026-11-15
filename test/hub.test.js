@@ -484,3 +484,20 @@ test('restart takes the newest finished pipeline; Woodpecker 2 is reported', asy
   const ack = await world.fake.action('test_connection', {});
   assert.match(ack.data.message.en, /Woodpecker 2\.8\.3: version 3 or later is needed/);
 });
+
+test('a pipeline approved after a newer one ended is announced', async (t) => {
+  const world = await createWorld({ config: { ...CONFIG, scope: 'all' } });
+  t.after(() => world.app.stop());
+  const blocked = world.woodpecker.start(WEBSITE, { event: 'pull_request', status: 'blocked' });
+  world.woodpecker.finish(WEBSITE, 'success', { branch: 'main', event: 'push' });
+  await world.hub.pollNow();
+  world.woodpecker.finish(WEBSITE, 'failure', { number: blocked });
+  await world.hub.pollNow();
+  assert.deepEqual(
+    events(world, TRIGGERS.FINISHED).map((event) => [event.data.number, event.data.result]),
+    [
+      [3, 'success'],
+      [blocked, 'failure'],
+    ],
+  );
+});

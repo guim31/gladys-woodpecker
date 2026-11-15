@@ -33,7 +33,6 @@ import {
   serverValues,
 } from './devices.js';
 import {
-  ACTIVE,
   ERROR_KINDS,
   WoodpeckerClient,
   WoodpeckerError,
@@ -361,13 +360,12 @@ export class WoodpeckerHub {
         out.set(repo.id, { signature, pipelines: [] });
         return;
       }
-      // A pipeline awaiting approval may wait for days: not read again for it.
+      // A pipeline awaiting approval is read again too: approved, an older
+      // one may end without moving the last pipeline of the repository.
       if (
         cached &&
         cached.signature === signature &&
-        !cached.pipelines.some(
-          (pipeline) => pipeline.status === ACTIVE.RUNNING || pipeline.status === ACTIVE.PENDING,
-        )
+        !cached.pipelines.some((pipeline) => isActive(pipeline.status))
       ) {
         out.set(repo.id, cached);
         return;
