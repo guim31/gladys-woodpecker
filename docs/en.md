@@ -1,61 +1,190 @@
-# Demo Devices Template
+# Woodpecker CI
 
-This is the user documentation of the integration. Gladys re-hosts this file
-and shows a permanent **Documentation** link to it in the Configuration screen
-(in the user's language, with English as the fallback) — it is when
-configuring that the user needs it most. Keep the short onboarding hints in
-the `section` blocks of the manifest `config_schema`; put the long
-step-by-step (screenshots, troubleshooting…) here.
+[Woodpecker CI](https://woodpecker-ci.org/) is a free, self-hosted continuous
+integration engine, often paired with Forgejo, Gitea or GitHub. This integration
+follows its pipelines: each repository becomes a device with the status of its
+last pipeline, its number, branch, event and duration, and whether a pipeline
+is running; a **Woodpecker CI** device says whether the server answers, and
+sums up the queue, the idle agents and the failing repositories. Scenes can
+react to a **finished pipeline** or a repository that **fails or goes back to
+green**, read a repository, and, if you allow it, **restart the last
+pipeline**. A dashboard widget shows the last pipelines at a glance.
 
-## What you get
+Tested against a real Woodpecker 3.20 server with a Forgejo forge and an agent
+(Docker); not against a real Gladys instance yet: feedback welcome on
+[the issues](https://github.com/guim31/gladys-woodpecker/issues).
 
-Six demo devices show up after installation: a weather station (real data
-from Open-Meteo), a switch, a dimmable light, a smart plug with power
-metering, a motion sensor and a camera.
+## What you need
 
-## Configuration
+- Gladys Assistant 5.1.0 or later.
+- A Woodpecker server, version 3 or later, reachable from the Gladys machine.
+- A personal access token of a Woodpecker user. The repositories followed are
+  the active ones this user can see. The queue and the agents are given to an
+  admin's token only; restarting a pipeline needs the push permission on the
+  repository.
 
-1. Open the **Configuration** tab of the integration.
-2. Set the **latitude** and **longitude** the demo weather station should
-   observe (they default to Paris), and pick your temperature unit.
-   The **refresh interval** sets how often the weather station and the
-   plug's power are read: every 5 minutes by default, every minute at most.
-3. Save: the devices appear in the **Discovery** tab, ready to be added.
+At each refresh (every minute by default) the integration makes two light
+requests (the repositories with their last pipeline, the queue), plus one per
+repository whose pipelines moved since the previous reading (its ten newest
+pipelines). Restarting a pipeline adds one request, only when a scene asks for
+it.
 
-The **Prefer the local connection** toggle drives the demo plug: it reports
-the channel it actually uses as a badge (local or cloud), with an orange dot
-when it runs degraded (local refused, cloud fallback).
+## Getting started
 
-## Actions
+### 1. Create a personal access token
 
-- **Test the weather provider** — performs a live request to Open-Meteo and
-  shows the current temperature and humidity under the button.
-- **Identify a device** — pick one of your devices in the list and it will
-  signal itself (the demo light "blinks" in the logs).
+In Woodpecker, click your avatar at the top right, then **Personal access
+token**, and copy the token shown. Keep it secret: it gives the rights of your
+user. A dedicated user, member of the repositories to follow only, limits what
+Gladys can see; the queue and agents then stay unknown.
 
-## Scenes
+### 2. Configure the integration
 
-The integration adds its own cards to the scene editor (Gladys 5.1 or
-later), under the **Integrations** category:
+In Gladys, open **Integrations → Woodpecker CI → Configuration** and fill in:
 
-- **Motion detected** (trigger) — starts the scene when a demo motion sensor
-  sees something move. Optionally pick the sensor and what moved (person,
-  animal); left empty, any detection matches. The following actions can
-  read what moved with `{{triggerEvent.data.target}}`.
-- **Identify a device** (action) — makes the chosen device signal itself.
-  It returns whether the device could signal itself, so the following
-  actions can depend on it.
+- **Woodpecker address**: the address you open Woodpecker with,
+  `http://192.168.1.2:8000` or `https://ci.example.com` (keep the sub-path if
+  Woodpecker runs under one).
+- **Personal access token**: the token of step 1.
+- **Repositories to follow**: empty for every active repository (50 at most),
+  or `owner/name` or links copied from the forge, separated by commas. An owner
+  alone follows all its repositories. Example: `alice/website, my-org`.
+- **Pipelines that count**: **Default branch only** (default) takes the
+  pushes, scheduled and manual pipelines and deployments of the default branch:
+  a failing pull request does not turn the repository red. **All** takes every
+  pipeline: branches, pull requests and tags.
+- **Allow scenes to restart pipelines**: off by default. Turn it on to use the
+  **Restart the last Woodpecker pipeline** action.
+- **Refresh interval** and **Language of the names**.
+
+Click **Test the connection**: Woodpecker and its version, how many
+repositories are followed and failing, the queue and the idle agents (or that
+an admin token is needed for them), whether scenes may restart pipelines, and
+the listed repositories Woodpecker does not know.
+
+### 3. Add the devices
+
+In **Discovery**, add the **Woodpecker CI** device and the repositories you
+want. Their values arrive at once. The scene triggers and the widget work even
+for a repository not added as a device.
+
+## The devices
+
+### One device per repository
+
+Named after the full name of the repository (`owner/name`), identified by its
+Woodpecker id: renaming the repository on the forge keeps the device.
+
+| Feature                | Type     | Value                                                                                                    |
+| ---------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| Status                 | text     | Success, Failed, Error, Cancelled, Declined, Skipped, Pending, Running, Awaiting approval or No pipeline |
+| Last pipeline passed   | binary   | 1 when the last finished pipeline succeeded, 0 when it failed or could not run (error)                   |
+| Pipeline running       | binary   | 1 while a pipeline runs or waits for an agent                                                            |
+| Last pipeline number   | counter  | number of the last pipeline                                                                              |
+| Last pipeline duration | duration | duration of the last finished pipeline, in seconds                                                       |
+| Branch                 | text     | branch of the last pipeline                                                                              |
+| Event                  | text     | what started it: Push, Pull request, Tag, Release, Deployment, Scheduled, Manual                         |
+
+While a pipeline runs, the status says **Running**; **Last pipeline passed**
+and **Last pipeline duration** keep the values of the previous one. A cancelled
+or skipped pipeline leaves **Last pipeline passed** unchanged.
+
+### The Woodpecker CI device
+
+| Feature              | Type    | Value                                                          |
+| -------------------- | ------- | -------------------------------------------------------------- |
+| Reachable            | binary  | 1 when the server answers, 0 otherwise                         |
+| Pending workflows    | counter | workflows waiting for an agent (admin token)                   |
+| Running workflows    | counter | workflows running (admin token)                                |
+| Idle agents          | counter | agents connected and free: a busy agent is not counted (admin) |
+| Failing repositories | counter | followed repositories whose last decisive pipeline failed      |
+
+With a token that is not an admin's, the three figures of the queue are not
+published.
 
 ## Dashboard
 
-Add the **Demo status** widget to a dashboard: it shows the live
-temperature of the weather station and the power of the office plug, the
-connection the plug currently uses (orange when degraded) and the observed
-location. Its **Identify the light** button makes the demo light signal
-itself.
+The **Woodpecker pipelines** widget shows one row per repository, with the
+status, number and branch of its last pipeline: failing repositories first
+(still in red while a new pipeline runs), then the running ones. A line above
+gives the pending and running workflows and the idle agents (admin token).
+Choose some repositories in its settings, or leave it empty for all; the queue
+line and the **Refresh** button can be hidden. **Refresh** reads Woodpecker
+again at once. The rows show the names given in Gladys.
+
+## Scenes
+
+### Triggers
+
+- **Woodpecker pipeline finished**: a pipeline of a followed repository ended,
+  whatever its result (filter on the repository and the result: success,
+  failed, error, cancelled). Variables: the repository name, the pipeline
+  number, the result in words, the branch, the event, the duration in seconds,
+  the link and a summary ready for a message.
+- **Woodpecker repository failing or back to green**: a repository starts
+  failing (a failed pipeline or an error after a success, or its first pipeline
+  failing), or passes again after a failure (filter on the repository and the
+  change). Variables: the repository name, the pipeline number, the result, the
+  branch, the link and a summary.
+
+Only the pipelines that count (see **Pipelines that count**) fire these
+triggers. The first reading of a repository only learns its state: the past is
+never announced. At most three pipelines per repository and reading are
+announced. What was seen is kept in the integration, so a restart neither
+misses an event nor announces one twice.
+
+### Actions
+
+- **Restart the last Woodpecker pipeline**: restarts the newest pipeline that
+  counts of a followed repository, on the same commit; Woodpecker creates a new
+  pipeline. Needs **Allow scenes to restart pipelines** in the configuration.
+  Variables: the repository name, the number of the pipeline restarted, the
+  number of the new one and its link. Use **Woodpecker pipeline finished** to
+  react to its end.
+- **Read a Woodpecker repository**: the state of a followed repository as
+  variables for the next actions: status in words, last result, last pipeline
+  passed, pipeline running, last pipeline number and duration, branch, event,
+  link.
+
+### Scene ideas
+
+- **Woodpecker repository failing or back to green**, change "Failing" → turn
+  the office lamp red and send the summary; change "Back to green" → turn it
+  back to white.
+- **Woodpecker pipeline finished** for your deployment repository with result
+  "Success" → send yourself "the new version is online".
+- Every morning at 7:00 → **Restart the last Woodpecker pipeline** of a
+  repository whose tests depend on outside data, if it failed overnight.
 
 ## Troubleshooting
 
-The integration logs everything it does: check the integration logs from the
-Gladys UI (or `docker logs` on the host) with `LOG_LEVEL=debug` for the full
-detail.
+- **Woodpecker does not answer**: check the address from the Gladys machine
+  (same port, same protocol); a Docker Gladys reaches the host by its IP
+  address, not `localhost`.
+- **The address redirects**: type the `https://` address the browser ends on,
+  with the sub-path if any.
+- **Token refused**: the token was regenerated (Woodpecker keeps only one per
+  user) or mistyped: copy it again.
+- **No Woodpecker API at this address**: the address points to the forge or to
+  another service, or misses the sub-path.
+- **Woodpecker refused: the token needs the push permission on this
+  repository**: use the token of a user who may push, or keep restarting off.
+- A repository does not appear: it is not active in Woodpecker, its user cannot
+  see it, or more than 50 repositories match the list.
+- **Certificate refused**: a self-signed certificate is not accepted; use the
+  `http://` address on the local network.
+
+## Limits
+
+- Restarting the last pipeline is the only command, and is off by default.
+  Pipelines cannot be cancelled or approved from Gladys.
+- 50 repositories at most; Woodpecker is read every minute at the most often:
+  an event arrives up to one interval late.
+- The ten newest pipelines of a repository are read: when more than ten end
+  between two readings, the oldest ones are not announced.
+- The steps, logs and workflows of a pipeline are not read; neither are the
+  agents one by one.
+- Woodpecker 3 or later: older versions do not give the last pipeline of each
+  repository.
+- The texts of devices and scenes follow the language of the configuration;
+  feature names are set when a device is added.

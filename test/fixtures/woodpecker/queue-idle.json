@@ -1,0 +1,12 @@
+{
+  "pending": [],
+  "waiting_on_deps": [],
+  "running": [],
+  "stats": {
+    "worker_count": 1,
+    "pending_count": 0,
+    "waiting_on_deps_count": 0,
+    "running_count": 0
+  },
+  "paused": false
+}

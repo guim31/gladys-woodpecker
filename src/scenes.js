@@ -1,41 +1,53 @@
 // -----------------------------------------------------------------------------
-// Scene actions (SDK v0.14+, Gladys 5.1+).
+// Scene action handlers (manifest `scene_actions`, Gladys 5.1+).
 //
-// A scene action is an OPERATION a scene author places in a scene, with
-// parameters and a result: "identify this device", "take a snapshot", "clean
-// these rooms". Each one is declared in the manifest `scene_actions` field
-// (key, label, `fields` in the config_schema grammar, scalar `outputs`) and
-// handled here, keyed by that same `key`; index.js registers every entry with
-// `gladys.onSceneAction(key, ...)`.
+// "Restart the last Woodpecker pipeline": restarts the newest pipeline of a
+// followed repository (in the scope of the configuration), on the same
+// commit. Off unless "Allow scenes to restart pipelines" is on in the
+// configuration. The "Pipeline finished" trigger reports its end.
 //
-// Scene TRIGGERS are the other direction ("this happened"): they are fired by
-// the device that observes the event, see src/devices/motionSensor.js.
-//
-// The rules that matter:
-//   - `fields` arrive RESOLVED: scene variables substituted, defaults applied,
-//     validated by the core; a `"source": "devices"` field is the chosen
-//     device external_id;
-//   - resolve an object of the declared `outputs` (scalars only), readable by
-//     the following actions of the scene, or `undefined` for none. Keys not
-//     declared in the manifest are dropped by the core;
-//   - throwing fails THIS action only: the scene logs it and continues. A
-//     scene action is never a condition: return an output and let the scene
-//     author gate on it;
-//   - never fire a scene event as a consequence of a received action: a scene
-//     bound to that event would loop through the integration.
+// "Read a Woodpecker repository": the state of a followed repository as
+// outputs, for the next actions of the scene (a message, a condition). Read
+// again when the last reading is older than 30 seconds.
 // -----------------------------------------------------------------------------
 
-import { createLogger } from '@gladysassistant/integration-sdk';
-import { signalDevice } from './devices/index.js';
-
-const logger = createLogger({ name: 'scenes' });
+import { decisiveOf, eventText, isRunning, pipelineUrl, pipelinesOf, statusOf } from './devices.js';
+import { RESULTS } from './woodpecker/client.js';
+import { ACTION_TEXT, STATUS_TEXT, pick } from './texts.js';
 
 export const SCENE_ACTIONS = {
-  // The ack is awaited under the action's `timeout_seconds` (15 s in the
-  // manifest), counted from the moment the scene reaches the action.
-  async identify_device(gladys, { fields, config }) {
-    logger.info(`Scene action identify_device <- ${fields.device}`);
-    const signalled = await signalDevice(gladys, fields.device, config);
-    return { signalled };
+  async restart_pipeline(hub, { fields = {} }) {
+    const language = hub.config.language;
+    // Checked first: no request to Woodpecker when restarting is off.
+    if (!hub.config.allowRestart) {
+      throw new Error(pick(ACTION_TEXT.restartDisabled, language));
+    }
+    const repo = await hub.repoOf(fields.repo, language);
+    const { restarted, number } = await hub.restart(repo, language);
+    return {
+      repo_name: repo.fullName,
+      restarted_number: restarted,
+      number,
+      url: pipelineUrl(hub.config.url, repo, number || restarted),
+    };
+  },
+
+  async get_repo(hub, { fields = {} }) {
+    const language = hub.config.language;
+    const repo = await hub.repoOf(fields.repo, language);
+    const { last, finished } = pipelinesOf(repo);
+    const decisive = decisiveOf(repo);
+    return {
+      repo_name: repo.fullName,
+      status: pick(STATUS_TEXT[statusOf(repo)], language),
+      result: finished?.status ?? '',
+      passing: decisive?.status === RESULTS.SUCCESS,
+      running: isRunning(repo),
+      pipeline_number: last?.number ?? 0,
+      duration: finished?.duration ?? 0,
+      branch: last?.branch ?? '',
+      event: last?.event ? eventText(last.event, language) : '',
+      url: pipelineUrl(hub.config.url, repo, last?.number),
+    };
   },
 };

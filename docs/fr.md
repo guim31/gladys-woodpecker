@@ -1,67 +1,197 @@
-# Template de démonstration
+# Woodpecker CI
 
-Ceci est la documentation utilisateur de l'intégration. Gladys ré-héberge ce
-fichier et affiche un lien **Documentation** permanent vers lui dans l'écran
-de configuration (dans la langue de l'utilisateur, avec l'anglais en repli) —
-c'est au moment de configurer que l'utilisateur en a le plus besoin. Gardez
-les courtes indications d'accueil dans les blocs `section` du `config_schema`
-du manifest ; mettez ici le pas-à-pas détaillé (captures d'écran, dépannage…).
+[Woodpecker CI](https://woodpecker-ci.org/) est un moteur d'intégration continue
+libre et auto-hébergé, souvent associé à Forgejo, Gitea ou GitHub. Cette
+intégration suit ses pipelines : chaque dépôt devient un appareil avec l'état de
+son dernier pipeline, son numéro, sa branche, son événement et sa durée, et
+indique si un pipeline tourne ; un appareil **Woodpecker CI** dit si le serveur
+répond et résume la file d'attente, les agents libres et les dépôts en échec.
+Les scènes peuvent réagir à un **pipeline terminé** ou à un dépôt qui **passe en
+échec ou revient au vert**, lire un dépôt et, si vous l'autorisez, **relancer
+le dernier pipeline**. Un widget du tableau de bord montre les derniers
+pipelines d'un coup d'œil.
 
-## Ce que vous obtenez
+Testée contre un vrai serveur Woodpecker 3.20 avec une forge Forgejo et un agent
+(Docker) ; pas encore contre une vraie instance Gladys : vos retours sont les
+bienvenus dans [les issues](https://github.com/guim31/gladys-woodpecker/issues).
 
-Six appareils de démonstration apparaissent après l'installation : une
-station météo (vraies données Open-Meteo), un interrupteur, une lampe
-variable, une prise connectée avec mesure de puissance, un détecteur de
-mouvement et une caméra.
+## Ce qu'il vous faut
 
-## Configuration
+- Gladys Assistant 5.1.0 ou plus récent.
+- Un serveur Woodpecker, version 3 ou plus récente, joignable depuis la machine
+  de Gladys.
+- Un jeton d'accès personnel d'un utilisateur Woodpecker. Les dépôts suivis sont
+  les dépôts actifs que cet utilisateur voit. La file et les agents ne sont
+  donnés qu'au jeton d'un administrateur ; relancer un pipeline demande le droit
+  push sur le dépôt.
 
-1. Ouvrez l'onglet **Configuration** de l'intégration.
-2. Renseignez la **latitude** et la **longitude** que la station météo de
-   démonstration doit observer (Paris par défaut), et choisissez votre unité
-   de température. L'**intervalle de rafraîchissement** règle la fréquence
-   de lecture de la station météo et de la puissance de la prise : toutes
-   les 5 minutes par défaut, toutes les minutes au plus.
-3. Enregistrez : les appareils apparaissent dans l'onglet **Découverte**,
-   prêts à être ajoutés.
+À chaque actualisation (toutes les minutes par défaut), l'intégration fait deux
+requêtes légères (les dépôts avec leur dernier pipeline, la file), plus une par
+dépôt dont les pipelines ont bougé depuis la lecture précédente (ses dix
+pipelines les plus récents). Relancer un pipeline ajoute une requête, seulement
+quand une scène le demande.
 
-Le réglage **Préférer la connexion locale** pilote la prise de
-démonstration : elle affiche en badge le canal réellement utilisé (local ou
-cloud), avec un point orange quand elle fonctionne en mode dégradé (local
-refusé, bascule cloud).
+## Premiers pas
 
-## Actions
+### 1. Créer un jeton d'accès personnel
 
-- **Tester le fournisseur météo** — effectue une requête en direct vers
-  Open-Meteo et affiche la température et l'humidité actuelles sous le
-  bouton.
-- **Identifier un appareil** — choisissez un de vos appareils dans la liste
-  et il se signale (la lampe de démonstration « clignote » dans les logs).
+Dans Woodpecker, cliquez sur votre avatar en haut à droite, puis sur **Jeton
+d'accès personnel**, et copiez le jeton affiché. Gardez-le secret : il donne les
+droits de votre utilisateur. Un utilisateur dédié, membre des seuls dépôts à
+suivre, limite ce que Gladys peut voir ; la file et les agents restent alors
+inconnus.
 
-## Scènes
+### 2. Configurer l'intégration
 
-L'intégration ajoute ses propres cartes à l'éditeur de scènes (Gladys 5.1
-ou plus récent), dans la catégorie **Intégrations** :
+Dans Gladys, ouvrez **Intégrations → Woodpecker CI → Configuration** et
+remplissez :
 
-- **Mouvement détecté** (déclencheur) — lance la scène quand un détecteur
-  de démonstration voit bouger quelque chose. Choisissez éventuellement le
-  détecteur et ce qui a bougé (personne, animal) ; laissés vides, toute
-  détection correspond. Les actions suivantes peuvent lire ce qui a bougé
-  avec `{{triggerEvent.data.target}}`.
-- **Identifier un appareil** (action) — fait se signaler l'appareil choisi.
-  Elle indique si l'appareil a pu se signaler, pour que les actions
-  suivantes puissent en dépendre.
+- **Adresse de Woodpecker** : l'adresse avec laquelle vous ouvrez Woodpecker,
+  `http://192.168.1.2:8000` ou `https://ci.example.com` (gardez le sous-chemin si
+  Woodpecker tourne sous l'un d'eux).
+- **Jeton d'accès personnel** : le jeton de l'étape 1.
+- **Dépôts à suivre** : vide pour tous les dépôts actifs (50 au plus), ou
+  `propriétaire/nom` ou des liens copiés depuis la forge, séparés par des
+  virgules. Un propriétaire seul suit tous ses dépôts. Exemple :
+  `alice/site, mon-orga`.
+- **Pipelines pris en compte** : **Branche par défaut seulement** (par défaut)
+  retient les push, les pipelines planifiés et manuels et les déploiements de la
+  branche par défaut : une pull request en échec ne fait pas passer le dépôt au
+  rouge. **Tous** retient tous les pipelines : branches, pull requests et tags.
+- **Autoriser les scènes à relancer des pipelines** : désactivé par défaut.
+  Activez-le pour utiliser l'action **Relancer le dernier pipeline Woodpecker**.
+- **Intervalle d'actualisation** et **Langue des noms**.
+
+Cliquez sur **Tester la connexion** : Woodpecker et sa version, le nombre de
+dépôts suivis et en échec, la file et les agents libres (ou le besoin d'un
+jeton administrateur pour les voir), si les scènes peuvent relancer des
+pipelines, et les dépôts de la liste que Woodpecker ne connaît pas.
+
+### 3. Ajouter les appareils
+
+Dans **Découverte**, ajoutez l'appareil **Woodpecker CI** et les dépôts voulus.
+Leurs valeurs arrivent aussitôt. Les déclencheurs de scène et le widget
+fonctionnent même pour un dépôt non ajouté comme appareil.
+
+## Les appareils
+
+### Un appareil par dépôt
+
+Nommé d'après le nom complet du dépôt (`propriétaire/nom`), identifié par son
+identifiant Woodpecker : renommer le dépôt sur la forge garde l'appareil.
+
+| Fonctionnalité             | Type     | Valeur                                                                                                             |
+| -------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| État                       | texte    | Réussi, En échec, Erreur, Annulé, Refusé, Ignoré, En attente, En cours, En attente d'approbation ou Aucun pipeline |
+| Dernier pipeline réussi    | binaire  | 1 quand le dernier pipeline terminé a réussi, 0 quand il a échoué ou n'a pas pu tourner (erreur)                   |
+| Pipeline en cours          | binaire  | 1 pendant qu'un pipeline tourne ou attend un agent                                                                 |
+| Numéro du dernier pipeline | compteur | numéro du dernier pipeline                                                                                         |
+| Durée du dernier pipeline  | durée    | durée du dernier pipeline terminé, en secondes                                                                     |
+| Branche                    | texte    | branche du dernier pipeline                                                                                        |
+| Événement                  | texte    | ce qui l'a lancé : Push, Pull request, Tag, Release, Déploiement, Planifié, Manuel                                 |
+
+Pendant qu'un pipeline tourne, l'état indique **En cours** ; **Dernier pipeline
+réussi** et **Durée du dernier pipeline** gardent les valeurs du précédent. Un
+pipeline annulé ou ignoré laisse **Dernier pipeline réussi** inchangé.
+
+### L'appareil Woodpecker CI
+
+| Fonctionnalité       | Type     | Valeur                                                                |
+| -------------------- | -------- | --------------------------------------------------------------------- |
+| Joignable            | binaire  | 1 quand le serveur répond, 0 sinon                                    |
+| Workflows en attente | compteur | workflows qui attendent un agent (jeton administrateur)               |
+| Workflows en cours   | compteur | workflows en cours (jeton administrateur)                             |
+| Agents libres        | compteur | agents connectés et libres : un agent occupé n'est pas compté (admin) |
+| Dépôts en échec      | compteur | dépôts suivis dont le dernier pipeline décisif a échoué               |
+
+Avec un jeton qui n'est pas celui d'un administrateur, les trois chiffres de la
+file ne sont pas publiés.
 
 ## Tableau de bord
 
-Ajoutez le widget **État de la démo** à un tableau de bord : il affiche en
-direct la température de la station météo et la puissance de la prise du
-bureau, la connexion utilisée par la prise (en orange si dégradée) et la
-position observée. Son bouton **Identifier la lampe** fait se signaler la
-lampe de démonstration.
+Le widget **Pipelines Woodpecker** montre une ligne par dépôt, avec l'état, le
+numéro et la branche de son dernier pipeline : les dépôts en échec d'abord
+(toujours en rouge pendant qu'un nouveau pipeline tourne), puis ceux en cours.
+Une ligne au-dessus donne les workflows en attente et en cours et les agents
+libres (jeton administrateur). Choisissez des dépôts dans ses réglages, ou
+laissez vide pour tous ; la ligne de la file et le bouton **Actualiser** peuvent
+être masqués. **Actualiser** relit Woodpecker aussitôt. Les lignes portent les
+noms donnés dans Gladys.
+
+## Scènes
+
+### Déclencheurs
+
+- **Pipeline Woodpecker terminé** : un pipeline d'un dépôt suivi s'est terminé,
+  quel que soit son résultat (filtre sur le dépôt et le résultat : réussi, en
+  échec, erreur, annulé). Variables : le nom du dépôt, le numéro du pipeline, le
+  résultat en toutes lettres, la branche, l'événement, la durée en secondes, le
+  lien et un résumé prêt pour un message.
+- **Dépôt Woodpecker en échec ou revenu au vert** : un dépôt passe en échec (un
+  pipeline en échec ou en erreur après une réussite, ou son premier pipeline en
+  échec), ou réussit de nouveau après un échec (filtre sur le dépôt et le
+  changement). Variables : le nom du dépôt, le numéro du pipeline, le résultat,
+  la branche, le lien et un résumé.
+
+Seuls les pipelines pris en compte (voir **Pipelines pris en compte**)
+déclenchent ces scènes. La première lecture d'un dépôt n'apprend que son état :
+le passé n'est jamais annoncé. Au plus trois pipelines par dépôt et par lecture
+sont annoncés. Ce qui a été vu est gardé par l'intégration : un redémarrage ne
+fait ni manquer ni répéter un événement.
+
+### Actions
+
+- **Relancer le dernier pipeline Woodpecker** : relance le pipeline pris en
+  compte le plus récent d'un dépôt suivi, sur le même commit ; Woodpecker crée un
+  nouveau pipeline. Exige **Autoriser les scènes à relancer des pipelines** dans
+  la configuration. Variables : le nom du dépôt, le numéro du pipeline relancé,
+  celui du nouveau et son lien. Utilisez **Pipeline Woodpecker terminé** pour
+  réagir à sa fin.
+- **Lire un dépôt Woodpecker** : l'état d'un dépôt suivi en variables pour les
+  actions suivantes : état en toutes lettres, dernier résultat, dernier pipeline
+  réussi, pipeline en cours, numéro et durée du dernier pipeline, branche,
+  événement, lien.
+
+### Idées de scènes
+
+- **Dépôt Woodpecker en échec ou revenu au vert**, changement « En échec » →
+  passer la lampe du bureau en rouge et envoyer le résumé ; changement « Revenu
+  au vert » → la remettre en blanc.
+- **Pipeline Woodpecker terminé** pour votre dépôt de déploiement avec le
+  résultat « Réussi » → vous envoyer « la nouvelle version est en ligne ».
+- Chaque matin à 7 h → **Relancer le dernier pipeline Woodpecker** d'un dépôt
+  dont les tests dépendent de données extérieures, s'il a échoué dans la nuit.
 
 ## Dépannage
 
-L'intégration journalise tout ce qu'elle fait : consultez les logs de
-l'intégration depuis l'interface Gladys (ou `docker logs` sur l'hôte) avec
-`LOG_LEVEL=debug` pour le détail complet.
+- **Woodpecker ne répond pas** : vérifiez l'adresse depuis la machine de Gladys
+  (même port, même protocole) ; un Gladys sous Docker joint l'hôte par son
+  adresse IP, pas par `localhost`.
+- **L'adresse redirige** : saisissez l'adresse en `https://` sur laquelle finit
+  le navigateur, avec le sous-chemin s'il y en a un.
+- **Jeton refusé** : le jeton a été régénéré (Woodpecker n'en garde qu'un par
+  utilisateur) ou mal copié : copiez-le de nouveau.
+- **Aucune API Woodpecker à cette adresse** : l'adresse pointe vers la forge ou
+  vers un autre service, ou il manque le sous-chemin.
+- **Woodpecker a refusé : le jeton doit avoir le droit push sur ce dépôt** :
+  utilisez le jeton d'un utilisateur qui peut pousser, ou laissez la relance
+  désactivée.
+- Un dépôt n'apparaît pas : il n'est pas actif dans Woodpecker, son utilisateur
+  ne le voit pas, ou plus de 50 dépôts correspondent à la liste.
+- **Certificat refusé** : un certificat auto-signé n'est pas accepté ; utilisez
+  l'adresse en `http://` sur le réseau local.
+
+## Limites
+
+- Relancer le dernier pipeline est la seule commande, et elle est désactivée par
+  défaut. Les pipelines ne peuvent être ni annulés ni approuvés depuis Gladys.
+- 50 dépôts au plus ; Woodpecker est lu au plus souvent toutes les minutes : un
+  événement arrive jusqu'à un intervalle plus tard.
+- Les dix pipelines les plus récents d'un dépôt sont lus : quand plus de dix se
+  terminent entre deux lectures, les plus anciens ne sont pas annoncés.
+- Les étapes, journaux et workflows d'un pipeline ne sont pas lus, ni les agents
+  un par un.
+- Woodpecker 3 ou plus récent : les versions précédentes ne donnent pas le
+  dernier pipeline de chaque dépôt.
+- Les textes des appareils et des scènes suivent la langue de la configuration ;
+  les noms des fonctionnalités sont fixés à l'ajout d'un appareil.

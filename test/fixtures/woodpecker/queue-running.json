@@ -1,0 +1,72 @@
+{
+  "pending": [
+    {
+      "id": "5",
+      "pid": 1,
+      "name": "woodpecker",
+      "labels": {
+        "org-id": "1",
+        "repo": "alice/red-repo",
+        "woodpecker-ci.org/branch": "main",
+        "woodpecker-ci.org/commit-branch": "main",
+        "woodpecker-ci.org/event": "push",
+        "woodpecker-ci.org/forge-id": "forgejo",
+        "woodpecker-ci.org/org-id": "1",
+        "woodpecker-ci.org/repo-forge-id": "2",
+        "woodpecker-ci.org/repo-full-name": "alice/red-repo",
+        "woodpecker-ci.org/repo-id": "2",
+        "woodpecker-ci.org/repo-name": "red-repo"
+      },
+      "dependencies": null,
+      "run_on": ["success"],
+      "dep_status": {},
+      "agent_id": 0,
+      "pipeline_id": 6,
+      "repo_id": 2,
+      "concurrency_limit": 0,
+      "concurrency_group": "",
+      "created": 1794760246,
+      "pipeline_number": 3,
+      "agent_name": ""
+    }
+  ],
+  "waiting_on_deps": [],
+  "running": [
+    {
+      "id": "4",
+      "pid": 1,
+      "name": "woodpecker",
+      "labels": {
+        "org-id": "1",
+        "repo": "alice/green-repo",
+        "woodpecker-ci.org/branch": "main",
+        "woodpecker-ci.org/commit-branch": "main",
+        "woodpecker-ci.org/event": "push",
+        "woodpecker-ci.org/forge-id": "forgejo",
+        "woodpecker-ci.org/org-id": "1",
+        "woodpecker-ci.org/repo-forge-id": "1",
+        "woodpecker-ci.org/repo-full-name": "alice/green-repo",
+        "woodpecker-ci.org/repo-id": "1",
+        "woodpecker-ci.org/repo-name": "green-repo"
+      },
+      "dependencies": null,
+      "run_on": ["success"],
+      "dep_status": {},
+      "agent_id": 1,
+      "pipeline_id": 5,
+      "repo_id": 1,
+      "concurrency_limit": 0,
+      "concurrency_group": "",
+      "created": 1794760246,
+      "pipeline_number": 3,
+      "agent_name": "agent-1"
+    }
+  ],
+  "stats": {
+    "worker_count": 0,
+    "pending_count": 1,
+    "waiting_on_deps_count": 0,
+    "running_count": 1
+  },
+  "paused": false
+}
